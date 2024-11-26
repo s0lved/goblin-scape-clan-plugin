@@ -8,12 +8,10 @@ import java.util.regex.Pattern;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import net.runelite.api.ChatMessageType;
-import net.runelite.api.Client;
-import net.runelite.api.GameState;
-import net.runelite.api.Varbits;
+import net.runelite.api.*;
 import net.runelite.api.clan.ClanMember;
 import net.runelite.api.clan.ClanSettings;
+import net.runelite.api.coords.LocalPoint;
 import net.runelite.api.coords.WorldArea;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.events.GameTick;
@@ -65,9 +63,7 @@ public class GoblinScapePlugin extends Plugin
 	@Setter
 	private ArrayList<GoblinScapePlayerData> PlayerData = new ArrayList<>();
 
-	@Getter
-	@Setter
-	private WorldPoint playerPosition = new WorldPoint(0,0,0);
+
 
 	@Getter
 	@Setter
@@ -88,10 +84,10 @@ public class GoblinScapePlugin extends Plugin
 		if (isValidURL(config.getEndpoint())) {
 			if (wildernessChecker()) {
 			playerTitle = getTitle();
-
-			playerPosition = client.getLocalPlayer().getWorldLocation();
-
-			GoblinScapePlayerData p = new GoblinScapePlayerData(playerName, playerPosition.getX(), playerPosition.getY(), playerPosition.getPlane(), playerTitle, playerWorld);
+				Player player = client.getLocalPlayer();
+				LocalPoint localPoint = player.getLocalLocation();
+				WorldPoint worldPoint = WorldPoint.fromLocalInstance(client, localPoint);
+			GoblinScapePlayerData p = new GoblinScapePlayerData(playerName, worldPoint.getX(), worldPoint.getY(), worldPoint.getPlane(), playerTitle, playerWorld);
 			api.makePostRequest(p);
 		       }
 			}
