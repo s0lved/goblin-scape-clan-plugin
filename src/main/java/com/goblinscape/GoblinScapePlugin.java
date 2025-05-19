@@ -14,10 +14,12 @@ import net.runelite.api.clan.ClanSettings;
 import net.runelite.api.coords.LocalPoint;
 import net.runelite.api.coords.WorldArea;
 import net.runelite.api.coords.WorldPoint;
+import net.runelite.api.events.ChatMessage;
 import net.runelite.api.events.GameTick;
 import net.runelite.api.worldmap.WorldMap;
 import net.runelite.api.worldmap.WorldMapData;
 import net.runelite.api.events.GameStateChanged;
+import net.runelite.api.ChatMessageType;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
@@ -69,6 +71,9 @@ public class GoblinScapePlugin extends Plugin
 	@Setter
 	private boolean postError = false;
 
+	@Setter
+	private boolean msgError = false;
+
 	@Getter
 	@Setter
 	private boolean getError = false;
@@ -77,6 +82,108 @@ public class GoblinScapePlugin extends Plugin
 	GoblinScapeConfig provideConfig(ConfigManager configManager)
 	{
 		return configManager.getConfig(GoblinScapeConfig.class);
+	}
+
+
+	@Subscribe
+	public void onChatMessage(ChatMessage chatMessage)
+	{
+		if (chatMessage.getType() == ChatMessageType.CLAN_MESSAGE)
+		{
+			String player = extractUsername(chatMessage.getMessage());
+			String type = getType(chatMessage.getMessage());
+			String message = chatMessage.getMessage();
+			int timestamp = chatMessage.getTimestamp();
+			GoblinScapeMessage m = new GoblinScapeMessage(player, message, type, timestamp);
+			api.makeMessageRequest(m);
+		}
+	}
+
+	private String extractUsername(String message) {
+		String[] patterns = {
+				"^(.+?) has reached ",
+				"^(.+?) received a new collection log item:",
+				"^(.+?) received a drop:",
+				"^(.+?) received special loot from a raid:",
+				"^(.+?) received a clue item:",
+				"^(.+?) has a funny feeling like",
+				"^(.+?) feels something weird sneaking",
+				"^(.+?) feels like",
+				"^(.+?) has achieved a new ",
+				"^(.+?) has completed a quest:",
+				"^(.+?) has completed the",
+				"^(.+?) has unlocked the",
+				"^(.+?) has deposited",
+				"^(.+?) has withdrawn",
+				"^(.+?) has defeated ",
+				"^(.+?) has been defeated ",
+				"^(.+?) has left the clan",
+				"^(.+?) has been invited into the clan"
+		};
+
+		for (String regex : patterns) {
+			Pattern pattern = Pattern.compile(regex);
+			Matcher matcher = pattern.matcher(message);
+			if (matcher.find()) {
+				return matcher.group(1).trim();
+			}
+		}
+
+		return null;
+	}
+
+	private String getType(String message) {
+		if (message.contains("has reached ") && (message.contains("level") || message.contains("XP")))
+		{
+			return "Level";
+		}
+		else if (message.contains("received a new collection log item"))
+		{
+			return "Collection_Log";
+		}
+		else if (message.contains("received a drop:"))
+		{
+			return "Loot";
+		}
+		else if (message.contains("received special loot from a raid:"))
+		{
+			return "Loot";
+		}
+		else if (message.contains("received a clue item:"))
+		{
+			return "Clue";
+		}
+		else if (message.contains("has a funny feeling like") || message.contains("feels something weird sneaking") || message.contains("acquired something special:"))
+		{
+			return "Pet";
+		}
+		else if (message.contains("has completed a quest:"))
+		{
+			return "Quest";
+		}
+		else if (message.contains("has completed the") && message.contains("diary"))
+		{
+			return "Diary";
+		}
+		else if (message.contains("tier of rewards from Combat Achievements!") || (message.contains("has completed") && message.contains("combat task")))
+		{
+			return "Combat_Task";
+		}
+		else if (message.contains("personal best:"))
+		{
+			return "Personal_Best";
+		}
+		else if (message.contains("has defeated") || message.contains("has been defeated"))
+		{
+			return "PK";
+		}
+		else if (message.contains("into the coffer") || message.contains("from the coffer") || message.contains("has left the clan") || message.contains("has been invited into the clan"))
+		{
+			return "Clan";
+		}
+		else {
+			return "Other";
+		}
 	}
 
 	@Subscribe
@@ -122,11 +229,33 @@ public boolean isValidURL(String url)
 	public String getPostEndpoint()
 	{
 		String url = config.getEndpoint();
+		//redirect for members that have the old URL in their config
+		if (url.contains("goblin-scape-2cb7a2ad634e"))
+		{
+			url = "https://app.goblinscape.net/api/v1/";
+			return url + "post";
+		}
 		if (url.substring(url.length() - 1).equals("/"))
 		{
 			return url + "post";
 		}
-		return config.getEndpoint() + "/post";
+		return url + "/post";
+	}
+
+	public String getMessageEndpoint()
+	{
+		String url = config.getEndpoint();
+		//redirect for members that have the old URL in their config
+		if (url.contains("goblin-scape-2cb7a2ad634e"))
+		{
+			url = "https://app.goblinscape.net/api/v1/";
+			return url + "message";
+		}
+		if (url.substring(url.length() - 1).equals("/"))
+		{
+			return url + "message";
+		}
+		return url + "/message";
 	}
 
 	public String getSharedKey()
