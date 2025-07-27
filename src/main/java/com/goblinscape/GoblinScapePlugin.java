@@ -1,5 +1,7 @@
 package com.goblinscape;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
 import com.google.inject.Provides;
 import javax.inject.Inject;
 import java.util.regex.Matcher;
@@ -9,16 +11,16 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.*;
+import net.runelite.api.clan.ClanChannel;
+import net.runelite.api.clan.ClanChannelMember;
 import net.runelite.api.clan.ClanMember;
 import net.runelite.api.clan.ClanSettings;
 import net.runelite.api.coords.LocalPoint;
 import net.runelite.api.coords.WorldArea;
 import net.runelite.api.coords.WorldPoint;
-import net.runelite.api.events.ChatMessage;
-import net.runelite.api.events.GameTick;
+import net.runelite.api.events.*;
 import net.runelite.api.worldmap.WorldMap;
 import net.runelite.api.worldmap.WorldMapData;
-import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.ChatMessageType;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
@@ -77,18 +79,54 @@ public class GoblinScapePlugin extends Plugin
 	@Getter
 	@Setter
 	private boolean getError = false;
-
 	@Provides
 	GoblinScapeConfig provideConfig(ConfigManager configManager)
 	{
 		return configManager.getConfig(GoblinScapeConfig.class);
 	}
 
+	@Subscribe
+	public void onClanChannelChanged(ClanChannelChanged clanChannel) {
+		String clanName = client.getClanChannel().getName();
+		clanName = clanName.replace((char)160, ' ');
+
+		if (clanName.equals("Goblin Scape"))
+		{
+			sendOnlineMembers();
+			sendAllMembers();
+		}
+	}
+
+	@Subscribe
+	public void onClanMemberJoined(ClanMemberJoined clanMemberJoin)
+	{
+		String clanName = client.getClanChannel().getName();
+		clanName = clanName.replace((char)160, ' ');
+
+		if (clanName.equals("Goblin Scape"))
+		{
+			sendOnlineMembers();
+		}
+	}
+
+	@Subscribe
+	public void onClanMemberLeft(ClanMemberLeft clanMemberLeft)
+	{
+		String clanName = client.getClanChannel().getName();
+		clanName = clanName.replace((char)160, ' ');
+
+		if (clanName.equals("Goblin Scape"))
+		{
+			sendOnlineMembers();
+		}
+	}
 
 	@Subscribe
 	public void onChatMessage(ChatMessage chatMessage)
 	{
-		if (chatMessage.getType() == ChatMessageType.CLAN_MESSAGE)
+		String clanName = client.getClanChannel().getName();
+		clanName = clanName.replace((char)160, ' ');
+		if (chatMessage.getType() == ChatMessageType.CLAN_MESSAGE && clanName.equals("Goblin Scape"))
 		{
 			String player = extractUsername(chatMessage.getMessage());
 			String type = getType(chatMessage.getMessage());
@@ -98,7 +136,76 @@ public class GoblinScapePlugin extends Plugin
 			api.makeMessageRequest(m);
 		}
 	}
+	private ArrayList<String> getOnlineMembers()
+	{
+		ArrayList<String> onlinePlayers = new ArrayList<>();
 
+		ClanChannel channel = client.getClanChannel();
+		if (channel != null)
+		{
+			for (ClanChannelMember member : channel.getMembers())
+			{
+				onlinePlayers.add(member.getName());
+			}
+		}
+
+		return onlinePlayers;
+	}
+
+
+	private void sendOnlineMembers()
+	{
+		ArrayList<String> onlinePlayers = getOnlineMembers();
+
+		JsonObject payload = new JsonObject();
+		JsonArray playersJson = new JsonArray();
+
+		for (String name : onlinePlayers)
+		{
+			playersJson.add(name);
+		}
+
+		payload.add("players", playersJson);
+
+		api.sendOnlinePlayers(payload);
+	}
+
+	private ArrayList<JsonObject> getAllMembers()
+	{
+		ArrayList<JsonObject> membersList = new ArrayList<>();
+
+		ClanSettings settings = client.getClanSettings();
+		if (settings != null)
+		{
+			for (ClanMember member : settings.getMembers())
+			{
+				JsonObject obj = new JsonObject();
+				obj.addProperty("name", member.getName());
+				String title = settings.titleForRank(member.getRank()).getName();
+				obj.addProperty("title", title);
+				membersList.add(obj);
+			}
+		}
+
+		return membersList;
+	}
+
+	private void sendAllMembers()
+	{
+		ArrayList<JsonObject> members = getAllMembers();
+
+		JsonObject payload = new JsonObject();
+		JsonArray membersJson = new JsonArray();
+
+		for (JsonObject memberObj : members)
+		{
+			membersJson.add(memberObj);
+		}
+
+		payload.add("members", membersJson);
+		api.sendAllMembers(payload);
+
+	}
 	private String extractUsername(String message) {
 		String[] patterns = {
 				"^(.+?) has reached ",
@@ -188,8 +295,11 @@ public class GoblinScapePlugin extends Plugin
 
 	@Subscribe
 	public void onGameTick(GameTick tick) {
+
 		if (isValidURL(config.getEndpoint())) {
-			if (wildernessChecker()) {
+			String clanName = client.getClanChannel().getName();
+			clanName = clanName.replace((char)160, ' ');
+			if (wildernessChecker() && clanName.equals("Goblin Scape")) {
 			playerTitle = getTitle();
 				Player player = client.getLocalPlayer();
 				LocalPoint localPoint = player.getLocalLocation();
@@ -218,7 +328,6 @@ public boolean isValidURL(String url)
 
 	Matcher m = p.matcher(url);
 
-	//log.info(url + " matches regex: " + String.valueOf(m.matches()));
 	return m.matches();
 }
 	public String getGetEndpoint()
@@ -258,6 +367,37 @@ public boolean isValidURL(String url)
 		return url + "/message";
 	}
 
+	public String getOnlineEndpoint()
+	{
+		String url = config.getEndpoint();
+		//redirect for members that have the old URL in their config
+		if (url.contains("goblin-scape-2cb7a2ad634e"))
+		{
+			url = "https://app.goblinscape.net/api/v1/";
+			return url + "online";
+		}
+		if (url.substring(url.length() - 1).equals("/"))
+		{
+			return url + "online";
+		}
+		return url + "/online";
+	}
+
+	public String getMemberEndpoint()
+	{
+		String url = config.getEndpoint();
+		//redirect for members that have the old URL in their config
+		if (url.contains("goblin-scape-2cb7a2ad634e"))
+		{
+			url = "https://app.goblinscape.net/api/v1/";
+			return url + "members";
+		}
+		if (url.substring(url.length() - 1).equals("/"))
+		{
+			return url + "members";
+		}
+		return url + "/members";
+	}
 	public String getSharedKey()
 	{
 		return config.sharedKey();

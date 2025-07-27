@@ -120,4 +120,84 @@ public class GoblinScapeAPI {
             plugin.setMsgError(true);
         }
     }
+
+    protected void sendOnlinePlayers(JsonObject payload)
+    {
+        try
+        {
+            Request req = new Request.Builder()
+                    .url(plugin.getOnlineEndpoint())
+                    .addHeader("Authorization", plugin.getSharedKey())
+                    .post(RequestBody.create(JSON, gson.toJson(payload)))
+                    .build();
+
+            okHttpClient.newCall(req).enqueue(new Callback()
+            {
+                @Override
+                public void onFailure(Call call, IOException e)
+                {
+                    log.error("Failed to send online players: " + e.getMessage());
+                }
+
+                @Override
+                public void onResponse(Call call, Response response)
+                {
+                    if (response.isSuccessful())
+                    {
+                        log.info("Online players updated successfully.");
+                    }
+                    else
+                    {
+                        log.error("Failed to update online players. HTTP Code: " + response.code());
+                    }
+                    response.close();
+                }
+            });
+        }
+        catch (Exception e)
+        {
+            log.error("Error sending online players: " + e.getMessage());
+        }
+    }
+
+
+    protected void sendAllMembers(JsonObject payload)
+    {
+        try
+        {
+            Request req = new Request.Builder()
+                    .url(plugin.getMemberEndpoint())
+                    .addHeader("Authorization", plugin.getSharedKey())
+                    .post(RequestBody.create(JSON, gson.toJson(payload)))
+                    .build();
+
+            okHttpClient.newCall(req).enqueue(new Callback()
+            {
+                @Override
+                public void onFailure(Call call, IOException e)
+                {
+                    log.error("Failed to send members: " + e.getMessage());
+                }
+
+                @Override
+                public void onResponse(Call call, Response response)
+                {
+                    if (response.isSuccessful())
+                    {
+                        log.info("Members updated successfully.");
+                    }
+                    else
+                    {
+                        log.error("Failed to update members. HTTP Code: " + response.code());
+                    }
+                    response.close();
+                }
+            });
+        }
+        catch (Exception e)
+        {
+            log.error("Error sending members: " + e.getMessage());
+        }
+    }
 }
+
