@@ -1,10 +1,12 @@
 package com.goblinscape;
 import com.google.gson.*;
 import lombok.extern.slf4j.Slf4j;
+import net.runelite.client.config.ConfigManager;
 import okhttp3.*;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Base64;
 import javax.inject.Inject;
 @Slf4j
 public class GoblinScapeAPI {
@@ -14,7 +16,8 @@ public class GoblinScapeAPI {
 
     @Inject
     private Gson gson;
-
+    @Inject
+    private ConfigManager configManager;
     @Inject
     private GoblinScapePlugin plugin;
 
@@ -197,6 +200,57 @@ public class GoblinScapeAPI {
         catch (Exception e)
         {
             log.error("Error sending members: " + e.getMessage());
+        }
+    }
+
+    public void uploadPlayerModel(String playerName, byte[] modelData)
+    {
+        try
+        {
+            String base64Model = Base64.getEncoder().encodeToString(modelData);
+
+            JsonObject payload = new JsonObject();
+            payload.addProperty("player", playerName);
+            payload.addProperty("model", base64Model);
+
+            Request request = new Request.Builder()
+                    .url(plugin.getUploadModelEndpoint())
+                    .addHeader("Authorization", plugin.getSharedKey())
+                    .post(RequestBody.create(JSON, gson.toJson(payload)))
+                    .build();
+
+            okHttpClient.newCall(request).enqueue(new Callback()
+            {
+                @Override
+                public void onFailure(Call call, IOException e)
+                {
+                    log.error("Failed to upload player model: " + e.getMessage());
+                }
+
+                @Override
+                public void onResponse(Call call, Response response)
+                {
+                    try
+                    {
+                        if (response.isSuccessful())
+                        {
+                            log.info("Player model uploaded successfully.");
+                        }
+                        else
+                        {
+                            log.error("Failed to upload player model. HTTP Code: " + response.code());
+                        }
+                    }
+                    finally
+                    {
+                        response.close();
+                    }
+                }
+            });
+        }
+        catch (Exception e)
+        {
+            log.error("Error preparing model upload: " + e.getMessage());
         }
     }
 }

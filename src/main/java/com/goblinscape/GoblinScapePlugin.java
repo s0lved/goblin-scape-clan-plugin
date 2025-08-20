@@ -4,6 +4,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.inject.Provides;
 import javax.inject.Inject;
+import java.io.IOException;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -25,6 +26,7 @@ import net.runelite.api.ChatMessageType;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
+import net.runelite.client.events.SessionOpen;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.ui.overlay.worldmap.WorldMapPoint;
@@ -50,6 +52,9 @@ public class GoblinScapePlugin extends Plugin
 
 	@Inject
 	private GoblinScapeConfig config;
+
+	@Inject
+	private ConfigManager configManager;
 
 	@Getter
 	@Setter
@@ -85,6 +90,7 @@ public class GoblinScapePlugin extends Plugin
 		return configManager.getConfig(GoblinScapeConfig.class);
 	}
 
+
 	@Subscribe
 	public void onClanChannelChanged(ClanChannelChanged clanChannel) {
 		String clanName = client.getClanChannel().getName();
@@ -105,7 +111,8 @@ public class GoblinScapePlugin extends Plugin
 
 		if (clanName.equals("Goblin Scape"))
 		{
-			sendOnlineMembers();
+			// Delay until after the client updates the member list
+			clientThread.invokeLater(this::sendOnlineMembers);
 		}
 	}
 
@@ -117,7 +124,8 @@ public class GoblinScapePlugin extends Plugin
 
 		if (clanName.equals("Goblin Scape"))
 		{
-			sendOnlineMembers();
+			// Delay until after the client updates the member list
+			clientThread.invokeLater(this::sendOnlineMembers);
 		}
 	}
 
@@ -398,6 +406,22 @@ public boolean isValidURL(String url)
 		}
 		return url + "/members";
 	}
+
+	public String getUploadModelEndpoint()
+	{
+		String url = config.getEndpoint();
+		//redirect for members that have the old URL in their config
+		if (url.contains("goblin-scape-2cb7a2ad634e"))
+		{
+			url = "https://app.goblinscape.net/api/v1/";
+			return url + "members/upload-model";
+		}
+		if (url.substring(url.length() - 1).equals("/"))
+		{
+			return url + "members/upload-model";
+		}
+		return url + "/members/upload-model";
+	}
 	public String getSharedKey()
 	{
 		return config.sharedKey();
@@ -415,6 +439,32 @@ private String getTitle()
 
 	return clanSettings.titleForRank(member.getRank()).getName();
 }
+
+	protected void sendPlayerModel()
+	{
+		if (client.getLocalPlayer() == null)
+		{
+			log.warn("Local player not found, cannot export model.");
+			return;
+		}
+
+		Model model = client.getLocalPlayer().getModel();
+		if (model == null)
+		{
+			log.warn("Player model not yet available.");
+			return;
+		}
+
+		try
+		{
+			byte[] plyData = ModelExporter.toBytes(client, model);
+			api.uploadPlayerModel(client.getLocalPlayer().getName(), plyData);
+		}
+		catch (Exception e)
+		{
+			log.error("Error exporting model: " + e.getMessage());
+		}
+	}
 
 	public boolean wildernessChecker()
 	{
@@ -440,8 +490,8 @@ private String getTitle()
 			{
 				return false;
 			}
+			sendPlayerModel();
 			playerWorld = client.getWorld();
-
 			return true;
 		});
 	}
